@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Pastel Roguelite</title>
+<style>
+    body {
+        margin: 0;
+        overflow: hidden;
+        background: #fafafa;
+        font-family: sans-serif;
+    }
+    #winScreen, #deathScreen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 48px;
+        font-weight: bold;
+        visibility: hidden;
+    }
+    #damageFlash {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(255, 0, 0, 0.4);
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.15s linear;
+        opacity: 0;
+    }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="winScreen">You Win!</div>
+<div id="deathScreen">You Died.</div>
+<div id="damageFlash"></div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// -------------------------------
+// Player (now chibi style)
+// -------------------------------
+const player = {
+    x: canvas.width/2,
+    y: canvas.height/2,
+    size: 24,
+    speed: 3,
+    slashCooldown: 0,
+    slashRate: 40,
+    arcRadius: 80,
+    lastDir: { x: 0, y: -1 },
+    health: 10
+};
+
+// Input
+const keys = { w:false, a:false, s:false, d:false };
+document.addEventListener("keydown", e => { if (keys[e.key]!==undefined) keys[e.key]=true; });
+document.addEventListener("keyup", e => { if (keys[e.key]!==undefined) keys[e.key]=false; });
+
+// Enemies become pastel bubbles
+const enemies = [];
+let killCount = 0;
+
+function spawnEnemy() {
+    if (killCount >= 100) return;
+    let side = Math.floor(Math.random()*4);
+    let x, y;
+    if (side === 0) { x = 0; y = Math.random()*canvas.height; }
+    if (side === 1) { x = canvas.width; y = Math.random()*canvas.height; }
+    if (side === 2) { x = Math.random()*canvas.width; y = 0; }
+    if (side === 3) { x = Math.random()*canvas.width; y = canvas.height; }
+
+    enemies.push({
+        x, y,
+        size: 26,
+        speed: 0.8 + Math.random()*0.5
+    });
+}
+setInterval(spawnEnemy, 300);
+
+// Sweeping attack
+let activeArcs = [];
+function attack() {
+    const baseAngle = Math.atan2(player.lastDir.y, player.lastDir.x);
+    activeArcs.push({
+        x: player.x,
+        y: player.y,
+        radius: player.arcRadius,
+        currentAngle: baseAngle - Math.PI*0.8,
+        endAngle: baseAngle + Math.PI*0.8,
+        speed: 0.28,
+        width: 0.45,
+        life: 30
+    });
+}
+
+// -------------------------------
+// Pastel Grass Plains Background
+// -------------------------------
+function drawPastelGrass() {
+    // Gradient sky/ground
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, "#dff8ff");   // pastel sky blue
+    grad.addColorStop(1, "#c9f7c6");   // soft grass green
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // Light grass strokes
+    for (let i = 0; i < 120; i++) {
+        let x = Math.random()*canvas.width;
+        let y = canvas.height*0.6 + Math.random()*canvas.height*0.4;
+        ctx.strokeStyle = "rgba(150, 200, 150, 0.25)";
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.random()*4 - 2, y - 12);
+        ctx.stroke();
+    }
+}
+
+// -------------------------------
+// Draw chibi player
+// -------------------------------
+function drawChibi(x, y, angle) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    // Head
+    ctx.fillStyle = "#ffeaea";
+    ctx.beginPath();
+    ctx.arc(0, -10, 14, 0, Math.PI*2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = "#ffdce6";
+    ctx.beginPath();
+    ctx.arc(0, 10, 12, 0, Math.PI*2);
+    ctx.fill();
+
+    // Eyes (big cute dots)
+    ctx.fillStyle = "#333";
+    ctx.beginPath();
+    ctx.arc(-5, -13, 3, 0, Math.PI*2);
+    ctx.arc( 5, -13, 3, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+// -------------------------------
+// Draw pastel bubble
+// -------------------------------
+function drawBubble(e) {
+    let grd = ctx.createRadialGradient(e.x, e.y, 2, e.x, e.y, e.size);
+    grd.addColorStop(0, "rgba(255,255,255,0.8)");
+    grd.addColorStop(1, "rgba(200,200,255,0.5)");
+    ctx.fillStyle = grd;
+
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.size, 0, Math.PI*2);
+    ctx.fill();
+
+    // Shine
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.beginPath();
+    ctx.arc(e.x - e.size/3, e.y - e.size/3, e.size/4, 0, Math.PI*2);
+    ctx.fill();
+}
+
+// -------------------------------
+let flashTimer = 0;
+let gameRunning = true;
+
+// Game Loop
+function update() {
+
+    if (!gameRunning) return;
+
+    drawPastelGrass();
+
+    // Movement
+    let mx = 0, my = 0;
+    if (keys.w) my -= 1;
+    if (keys.s) my += 1;
+    if (keys.a) mx -= 1;
+    if (keys.d) mx += 1;
+
+    if (mx || my) {
+        let len = Math.hypot(mx, my);
+        mx /= len; my /= len;
+        player.x += mx * player.speed;
+        player.y += my * player.speed;
+        player.lastDir = { x: mx, y: my };
+    }
+
+    player.x = Math.max(0, Math.min(canvas.width, player.x));
+    player.y = Math.max(0, Math.min(canvas.height, player.y));
+
+    // Attack cycle
+    if (player.slashCooldown-- <= 0) {
+        attack();
+        player.slashCooldown = player.slashRate;
+    }
+
+    // Attack arc
+    for (let i = activeArcs.length - 1; i >= 0; i--) {
+        let a = activeArcs[i];
+        a.life--;
+        a.currentAngle += a.speed;
+
+        if (a.currentAngle >= a.endAngle) {
+            activeArcs.splice(i,1);
+            continue;
+        }
+
+        ctx.fillStyle = "rgba(255,150,150,0.3)";
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.arc(a.x, a.y, a.radius, a.currentAngle - a.width, a.currentAngle + a.width);
+        ctx.closePath();
+        ctx.fill();
+
+        enemies.forEach((e, idx) => {
+            let dx = e.x - a.x;
+            let dy = e.y - a.y;
+            let dist = Math.hypot(dx, dy);
+            if (dist < a.radius + 10) {
+                enemies.splice(idx, 1);
+                killCount++;
+                if (killCount % 20 === 0) player.arcRadius += 15;
+            }
+        });
+    }
+
+    // Enemies move + damage
+    enemies.forEach((e, idx) => {
+        let ang = Math.atan2(player.y - e.y, player.x - e.x);
+        e.x += Math.cos(ang) * e.speed;
+        e.y += Math.sin(ang) * e.speed;
+
+        drawBubble(e);
+
+        let dx = player.x - e.x;
+        let dy = player.y - e.y;
+        if (Math.hypot(dx, dy) < player.size) {
+            enemies.splice(idx, 1);
+            player.health--;
+
+            // Flash
+            flashTimer = 10;
+            const df = document.getElementById("damageFlash");
+            df.style.visibility = "visible";
+            df.style.opacity = "1";
+
+            if (player.health <= 0) {
+                document.getElementById("deathScreen").style.visibility = "visible";
+                gameRunning = false;
+            }
+        }
+    });
+
+    // Draw Chibi Player
+    let angle = Math.atan2(player.lastDir.y, player.lastDir.x);
+    drawChibi(player.x, player.y, angle);
+
+    // Score
+    ctx.fillStyle = "#444";
+    ctx.font = "24px sans-serif";
+    ctx.fillText("Kills: " + killCount, 20, 70);
+
+    // Health bar
+    let barWidth = 200;
+    let hpPercent = player.health / 10;
+    ctx.strokeStyle = "#444";
+    ctx.strokeRect(20,20,barWidth,25);
+    ctx.fillStyle = "#ff9a9a";
+    ctx.fillRect(20,20,barWidth*hpPercent,25);
+
+    // Flash fade
+    if (flashTimer > 0) {
+        flashTimer--;
+        if (flashTimer === 0) {
+            const df = document.getElementById("damageFlash");
+            df.style.opacity = "0";
+            setTimeout(() => df.style.visibility = "hidden", 150);
+        }
+    }
+
+    if (killCount >= 100) {
+        document.getElementById("winScreen").style.visibility = "visible";
+        gameRunning = false;
+        return;
+    }
+
+    requestAnimationFrame(update);
+}
+
+update();
+</script>
+</body>
+</html>
