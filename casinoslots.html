@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Casino Slot Machine</title>
+<style>
+body {
+    background: darkgreen;
+    color: white;
+    text-align: center;
+    font-family: Arial, sans-serif;
+}
+#slots {
+    display: flex;
+    justify-content: center;
+    margin: 20px;
+    font-size: 60px;
+}
+#slot1, #slot2, #slot3 {
+    width: 100px;
+    height: 100px;
+    margin: 0 10px;
+    background: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 3px solid gold;
+    border-radius: 10px;
+}
+button {
+    font-size: 20px;
+    padding: 10px 20px;
+    margin: 10px;
+    cursor: pointer;
+}
+input {
+    font-size: 18px;
+    width: 100px;
+    text-align: center;
+}
+</style>
+</head>
+<body>
+
+<h1>Casino Slot Machine</h1>
+<h2>Balance: $<span id="balance">1000</span></h2>
+
+<p>Bet Amount: $<input type="number" id="betAmount" value="100" min="1"></p>
+<button onclick="spin()">Spin!</button>
+
+<div id="slots">
+    <div id="slot1">🍒</div>
+    <div id="slot2">🍋</div>
+    <div id="slot3">🔔</div>
+</div>
+
+<h2 id="result"></h2>
+
+<script>
+let balance = 1000;
+
+// Slot symbols
+const symbols = ["🍒","🍋","🔔","🍉","⭐","7️⃣"];
+
+function spin() {
+    let bet = parseInt(document.getElementById("betAmount").value);
+
+    if (bet > balance) {
+        alert("You don't have enough balance!");
+        return;
+    }
+    if (bet <= 0) {
+        alert("Bet must be greater than 0!");
+        return;
+    }
+
+    balance -= bet;
+    document.getElementById("balance").innerText = balance;
+    document.getElementById("result").innerText = "";
+
+    // Animate slots
+    let slot1 = document.getElementById("slot1");
+    let slot2 = document.getElementById("slot2");
+    let slot3 = document.getElementById("slot3");
+
+    let spins = 20; // number of spins
+    let i = 0;
+
+    let interval = setInterval(() => {
+        slot1.innerText = symbols[Math.floor(Math.random()*symbols.length)];
+        slot2.innerText = symbols[Math.floor(Math.random()*symbols.length)];
+        slot3.innerText = symbols[Math.floor(Math.random()*symbols.length)];
+        i++;
+        if (i > spins) {
+            clearInterval(interval);
+            checkWin(slot1.innerText, slot2.innerText, slot3.innerText, bet);
+        }
+    }, 100);
+}
+
+function checkWin(s1, s2, s3, bet) {
+    let resultText = "";
+    let winAmount = 0;
+
+    if (s1 === s2 && s2 === s3) {
+        // Big win
+        winAmount = bet * 5;
+        resultText = "JACKPOT! You won $" + winAmount;
+    } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+        // Small win
+        winAmount = bet * 2;
+        resultText = "Nice! You won $" + winAmount;
+    } else {
+        resultText = "No win! Try again.";
+    }
+
+    balance += winAmount;
+    document.getElementById("balance").innerText = balance;
+    document.getElementById("result").innerText = resultText;
+}
+</script>
+
+</body>
+</html>

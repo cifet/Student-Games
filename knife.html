@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Knife Hit Enhanced</title>
+<style>
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #111;
+    font-family: Arial, sans-serif;
+    color: white;
+    text-align: center;
+}
+canvas {
+    display: block;
+    margin: auto;
+    background: #222;
+}
+#score {
+    position: absolute;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 24px;
+    font-weight: bold;
+}
+#startScreen, #gameOverScreen {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-size: 36px;
+    z-index: 10;
+}
+button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-size: 24px;
+    cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div id="score">Score: 0</div>
+
+<div id="startScreen">
+    Knife Hit
+    <button onclick="startGame()">Start Game</button>
+</div>
+
+<div id="gameOverScreen" style="display:none;">
+    Game Over
+    <div id="finalScore"></div>
+    <button onclick="restartGame()">Restart</button>
+</div>
+
+<canvas id="game" width="400" height="600"></canvas>
+
+<script>
+// Canvas setup
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// Images
+const knifeImg = new Image();
+knifeImg.src = "https://i.imgur.com/JtXxvGg.png"; // knife image
+
+// Sounds
+const throwSound = new Audio("https://freesound.org/data/previews/65/65894_634166-lq.mp3");
+const hitSound = new Audio("https://freesound.org/data/previews/171/171497_2437358-lq.mp3");
+const gameOverSound = new Audio("https://freesound.org/data/previews/331/331912_3248244-lq.mp3");
+
+// Game variables
+let target = {
+    x: 200,
+    y: 200,
+    radius: 70,
+    angle: 0,
+    speed: 0.03
+};
+
+let knives = [];
+let stuckKnives = [];
+let score = 0;
+let gameOver = false;
+let level = 1;
+
+// Start and restart
+function startGame() {
+    document.getElementById("startScreen").style.display = "none";
+    resetGame();
+    update();
+}
+
+function restartGame() {
+    document.getElementById("gameOverScreen").style.display = "none";
+    resetGame();
+    update();
+}
+
+function resetGame() {
+    knives = [];
+    stuckKnives = [];
+    score = 0;
+    level = 1;
+    target.speed = 0.03;
+    gameOver = false;
+    document.getElementById("score").innerText = "Score: 0";
+}
+
+// Draw wheel using canvas
+function drawTarget() {
+    ctx.save();
+    ctx.translate(target.x, target.y);
+    ctx.rotate(target.angle);
+
+    // Draw wheel base
+    ctx.fillStyle = "#8B4513";
+    ctx.beginPath();
+    ctx.arc(0, 0, target.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw wheel sections
+    ctx.strokeStyle = "#654321";
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 8; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        let lineAngle = (i * Math.PI / 4);
+        ctx.lineTo(Math.sin(lineAngle) * target.radius, -Math.cos(lineAngle) * target.radius);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+// Draw knife
+function drawKnife(x, y, angle = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (knifeImg.complete) {
+        ctx.drawImage(knifeImg, -5, 0, 10, 25);
+    } else {
+        ctx.fillStyle = "white";
+        ctx.fillRect(-2, 0, 4, 25);
+    }
+    ctx.restore();
+}
+
+// Throw knife
+function throwKnife() {
+    if (gameOver) return;
+    knives.push({ x: 200, y: 550, speed: 8 });
+    throwSound.play();
+}
+
+// Collision detection
+function checkCollision(knife) {
+    let dx = knife.x - target.x;
+    let dy = knife.y - target.y;
+    let distance = Math.sqrt(dx*dx + dy*dy);
+
+    if (distance < target.radius) {
+        let knifeAngle = Math.atan2(dx, -dy) - target.angle;
+
+        for (let stuck of stuckKnives) {
+            let diff = Math.abs((knifeAngle - stuck.angle + Math.PI*2) % (Math.PI*2));
+            if (diff < 0.3 || diff > 2*Math.PI - 0.3) {
+                gameOver = true;
+                gameOverSound.play();
+            }
+        }
+
+        stuckKnives.push({ angle: knifeAngle });
+        score++;
+        hitSound.play();
+
+        // Increase difficulty every 5 points
+        if (score % 5 === 0) {
+            level++;
+            target.speed += 0.01;
+        }
+
+        document.getElementById("score").innerText = "Score: " + score;
+        return true;
+    }
+    return false;
+}
+
+// Game update loop
+function update() {
+    if (gameOver) {
+        document.getElementById("finalScore").innerText = "Score: " + score;
+        document.getElementById("gameOverScreen").style.display = "flex";
+        return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Rotate wheel
+    target.angle += target.speed;
+
+    drawTarget();
+
+    // Update moving knives
+    for (let knife of knives) {
+        knife.y -= knife.speed;
+        if (checkCollision(knife)) {
+            knives.splice(knives.indexOf(knife), 1);
+        }
+    }
+
+    // Draw moving knives
+    for (let knife of knives) {
+        drawKnife(knife.x, knife.y);
+    }
+
+    // Draw stuck knives
+    for (let stuck of stuckKnives) {
+        let angle = target.angle + stuck.angle;
+        let x = target.x + Math.sin(angle) * target.radius;
+        let y = target.y - Math.cos(angle) * target.radius;
+        drawKnife(x, y, angle);
+    }
+
+    requestAnimationFrame(update);
+}
+
+// Event listeners
+canvas.addEventListener("click", throwKnife);
+canvas.addEventListener("touchstart", (e) => { e.preventDefault(); throwKnife(); });
+</script>
+
+</body>
+</html>
