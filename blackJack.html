@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blackjack Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0a0014;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #game {
+      max-width: 500px;
+      margin: auto;
+      background: #1b0033; box-shadow: 0 0 25px rgba(180, 0, 255, 0.6);
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+    }
+
+    .hand {
+      margin: 15px 0;
+    }
+
+    .cards {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .card {
+      width: 70px;
+      height: 100px;
+      background: linear-gradient(135deg, #2d004d, #52008a);
+      color: #e6cfff;
+      border: 2px solid #b300ff;
+      border-radius: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 26px;
+      font-weight: bold;
+      box-shadow: 0 0 15px rgba(179, 0, 255, 0.6);
+    }
+
+    button {
+      padding: 12px 24px;
+      margin: 10px;
+      border: none;
+      background: linear-gradient(135deg, #5e00b8, #a200ff);
+      color: white;
+      font-size: 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(162, 0, 255, 0.6);
+      transition: 0.2s ease;
+    }
+    button:hover:not(:disabled) {
+      transform: scale(1.05);
+      box-shadow: 0 0 18px rgba(200, 0, 255, 0.9);
+    }
+
+    button:disabled {
+      background: #3d003f;
+      color: #999;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    @keyframes glowPulse {
+      0% { box-shadow: 0 0 10px rgba(180, 0, 255, 0.4); }
+      50% { box-shadow: 0 0 20px rgba(200, 0, 255, 0.8); }
+      100% { box-shadow: 0 0 10px rgba(180, 0, 255, 0.4); }
+    }
+
+    @keyframes cardFloat {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+      100% { transform: translateY(0px); }
+    }
+
+    .card {
+      animation: cardFloat 3s ease-in-out infinite;
+    }
+
+    #game {
+      animation: glowPulse 4s ease-in-out infinite;
+    }
+
+</style>
+</head>
+<body>
+  <h1>Blackjack</h1>
+
+  <div id="game">
+    <div class="hand" id="dealer-hand">
+      <h2>Dealer</h2>
+      <div class="cards" id="dealer-cards"></div>
+      <p id="dealer-score"></p>
+    </div>
+
+    <div class="hand" id="player-hand">
+      <h2>Player</h2>
+      <div class="cards" id="player-cards"></div>
+      <p id="player-score"></p>
+    </div>
+
+    <h2 id="result"></h2>
+
+    <button id="hit-btn">Hit</button>
+    <button id="stand-btn">Stand</button>
+    <button id="restart-btn" style="display:none;">Restart</button>
+  </div>
+
+  <script>
+    const suits = ["♠", "♥", "♦", "♣"];
+    const values = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+
+    let deck = [];
+    let playerHand = [];
+    let dealerHand = [];
+
+    const playerCardsDiv = document.getElementById("player-cards");
+    const dealerCardsDiv = document.getElementById("dealer-cards");
+    const playerScoreP = document.getElementById("player-score");
+    const dealerScoreP = document.getElementById("dealer-score");
+    const resultH2 = document.getElementById("result");
+
+    const hitBtn = document.getElementById("hit-btn");
+    const standBtn = document.getElementById("stand-btn");
+    const restartBtn = document.getElementById("restart-btn");
+
+    function createDeck() {
+      deck = [];
+      for (let suit of suits) {
+        for (let value of values) {
+          deck.push({ value, suit });
+        }
+      }
+      deck.sort(() => Math.random() - 0.5);
+    }
+
+    function getCardValue(card) {
+      if (card.value === "A") return 11;
+      if (["K", "Q", "J"].includes(card.value)) return 10;
+      return parseInt(card.value);
+    }
+
+    function calculateScore(hand) {
+      let score = hand.reduce((sum, card) => sum + getCardValue(card), 0);
+      let aces = hand.filter(card => card.value === "A").length;
+
+      while (score > 21 && aces > 0) {
+        score -= 10;
+        aces--;
+      }
+      return score;
+    }
+
+    function renderHand(hand, container) {
+      container.innerHTML = "";
+      hand.forEach(card => {
+        const div = document.createElement("div");
+        div.className = "card";
+        div.textContent = card.value + card.suit;
+        container.appendChild(div);
+      });
+    }
+
+    function checkGameState() {
+      const playerScore = calculateScore(playerHand);
+
+      if (playerScore > 21) {
+        endGame("You busted! Dealer wins.");
+      }
+    }
+
+    function endGame(message) {
+      hitBtn.disabled = true;
+      standBtn.disabled = true;
+      resultH2.textContent = message;
+      restartBtn.style.display = "inline-block";
+
+      renderBoard();
+    }
+
+    function dealerPlay() {
+      while (calculateScore(dealerHand) < 17) {
+        dealerHand.push(deck.pop());
+      }
+
+      const playerScore = calculateScore(playerHand);
+      const dealerScore = calculateScore(dealerHand);
+
+      if (dealerScore > 21 || playerScore > dealerScore) {
+        endGame("You win!");
+      } else if (dealerScore === playerScore) {
+        endGame("It's a tie!");
+      } else {
+        endGame("Dealer wins!");
+      }
+    }
+
+    function renderBoard() {
+      renderHand(playerHand, playerCardsDiv);
+      renderHand(dealerHand, dealerCardsDiv);
+      playerScoreP.textContent = "Score: " + calculateScore(playerHand);
+      dealerScoreP.textContent = "Score: " + calculateScore(dealerHand);
+    }
+
+    function startGame() {
+      createDeck();
+      playerHand = [deck.pop(), deck.pop()];
+      dealerHand = [deck.pop(), deck.pop()];
+
+      hitBtn.disabled = false;
+      standBtn.disabled = false;
+      resultH2.textContent = "";
+      restartBtn.style.display = "none";
+
+      renderBoard();
+    }
+
+    hitBtn.addEventListener("click", () => {
+      playerHand.push(deck.pop());
+      renderBoard();
+      checkGameState();
+    });
+
+    standBtn.addEventListener("click", () => {
+      dealerPlay();
+    });
+
+    restartBtn.addEventListener("click", startGame);
+
+    startGame();
+  </script>
+</body>
+</html>

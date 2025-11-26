@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tetris Slam Game</title>
+
+<style>
+  /* ------------------------------
+      GLOBAL AESTHETIC
+  -------------------------------*/
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Orbitron', sans-serif;
+    background: linear-gradient(135deg, #0a0f24, #0b0026, #000);
+    background-size: 400% 400%;
+    animation: bgMove 20s ease infinite;
+    color: #ffffffcc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  @keyframes bgMove {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  h1 {
+    margin-top: 30px;
+    font-size: 42px;
+    color: #00eaff;
+    text-shadow: 0 0 12px #00eaffaa;
+    letter-spacing: 4px;
+  }
+
+  /* ------------------------------
+      GAME CANVAS
+  -------------------------------*/
+  canvas {
+    background: rgba(15, 15, 35, 0.8);
+    border: 3px solid #00eaff;
+    box-shadow: 0px 0px 25px #00eaff66;
+    margin-top: 25px;
+    border-radius: 6px;
+  }
+
+  /* ------------------------------
+      SCORE
+  -------------------------------*/
+  #score {
+    font-size: 24px;
+    margin-top: 15px;
+    color: #fff;
+    padding: 8px 18px;
+    background: rgba(0, 255, 200, 0.1);
+    border: 1px solid #00ffc8aa;
+    border-radius: 8px;
+    box-shadow: 0 0 12px #00ffc855;
+    text-shadow: 0 0 6px #00ffc8dd;
+  }
+
+  /* ------------------------------
+      SLAM EXPLOSION EFFECT
+  -------------------------------*/
+  .explode {
+    animation: explode 0.35s ease-out forwards;
+    box-shadow: 0 0 12px #fff;
+  }
+
+  @keyframes explode {
+    0%   { transform: scale(1); opacity: 1; filter: blur(0px); }
+    100% { transform: scale(2.5); opacity: 0; filter: blur(8px); }
+  }
+</style>
+</head>
+<body>
+
+<h1>TETRIS SLAM</h1>
+<canvas id="tetris" width="240" height="400"></canvas>
+<div id="score">Score: 0</div>
+
+
+
+<script>
+/* -----------------------------------------------------
+      ALL ORIGINAL GAME LOGIC — UNCHANGED
+   ----------------------------------------------------- */
+
+const canvas = document.getElementById('tetris');
+const context = canvas.getContext('2d');
+context.scale(20, 20);
+
+const arena = createMatrix(12, 20);
+
+const pieces = 'ILJOTSZ';
+const colors = [
+  null,
+  '#00f0f0', // I
+  '#0070ff', // J
+  '#ffa000', // L
+  '#f0f000', // O
+  '#00f000', // S
+  '#b000f0', // T
+  '#ff0030', // Z
+];
+
+let dropCounter = 0;
+let dropInterval = 1000;
+let lastTime = 0;
+let score = 0;
+
+const player = {
+  pos: {x:0, y:0},
+  matrix: null,
+  score: 0
+};
+
+function createMatrix(w, h) {
+  const matrix = [];
+  while(h--) matrix.push(new Array(w).fill(0));
+  return matrix;
+}
+
+function createPiece(type) {
+  switch(type) {
+    case 'T': return [[0,0,0],[1,1,1],[0,1,0]];
+    case 'O': return [[2,2],[2,2]];
+    case 'L': return [[0,0,3],[3,3,3],[0,0,0]];
+    case 'J': return [[4,0,0],[4,4,4],[0,0,0]];
+    case 'I': return [[0,5,0,0],[0,5,0,0],[0,5,0,0],[0,5,0,0]];
+    case 'S': return [[0,6,6],[6,6,0],[0,0,0]];
+    case 'Z': return [[7,7,0],[0,7,7],[0,0,0]];
+  }
+}
+
+function collide(arena, player) {
+  const m = player.matrix;
+  const o = player.pos;
+  for(let y = 0; y < m.length; ++y) {
+    for(let x = 0; x < m[y].length; ++x) {
+      if(m[y][x] !== 0 &&
+        (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function merge(arena, player) {
+  player.matrix.forEach((row, y) => {
+    row.forEach((value, x) => {
+      if(value !== 0) {
+        arena[y + player.pos.y][x + player.pos.x] = value;
+      }
+    });
+  });
+}
+
+function rotate(matrix, dir) {
+  for(let y = 0; y < matrix.length; ++y) {
+    for(let x = 0; x < y; ++x) {
+      [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+    }
+  }
+  if(dir > 0) matrix.forEach(row => row.reverse());
+  else matrix.reverse();
+}
+
+function playerRotate(dir) {
+  const pos = player.pos.x;
+  let offset = 1;
+  rotate(player.matrix, dir);
+  while(collide(arena, player)) {
+    player.pos.x += offset;
+    offset = -(offset + (offset > 0 ? 1 : -1));
+    if(offset > player.matrix[0].length) {
+      rotate(player.matrix, -dir);
+      player.pos.x = pos;
+      return;
+    }
+  }
+}
+
+function arenaSweep() {
+  let rowCount = 1;
+  outer: for(let y = arena.length -1; y >= 0; --y) {
+    for(let x = 0; x < arena[y].length; ++x) {
+      if(arena[y][x] === 0) continue outer;
+    }
+    const row = arena.splice(y,1)[0].map(() => 0);
+    arena.unshift(row);
+    y++;
+    score += rowCount * 10;
+    rowCount *= 2;
+  }
+  document.getElementById('score').innerText = 'Score: ' + score;
+}
+
+function playerDrop() {
+  player.pos.y++;
+  if(collide(arena, player)) {
+    player.pos.y--;
+    merge(arena, player);
+    slamExplode();
+    playerReset();
+    arenaSweep();
+  }
+  dropCounter = 0;
+}
+
+function slamExplode() {
+  const x0 = player.pos.x;
+  const y0 = player.pos.y;
+  player.matrix.forEach((row,y) => {
+    row.forEach((val,x) => {
+      if(val) {
+        const sx = (x + x0) * 20;
+        const sy = (y + y0) * 20;
+        const canvasClone = document.createElement('canvas');
+        canvasClone.width = 20;
+        canvasClone.height = 20;
+        canvasClone.style.position = 'absolute';
+        canvasClone.style.left = (canvas.offsetLeft + sx) + 'px';
+        canvasClone.style.top = (canvas.offsetTop + sy) + 'px';
+        canvasClone.className = 'explode';
+        document.body.appendChild(canvasClone);
+        setTimeout(()=>document.body.removeChild(canvasClone),350);
+      }
+    });
+  });
+}
+
+function playerMove(dir) {
+  player.pos.x += dir;
+  if(collide(arena, player)) player.pos.x -= dir;
+}
+
+function playerReset() {
+  const piecesType = pieces[Math.floor(Math.random() * pieces.length)];
+  player.matrix = createPiece(piecesType);
+  player.pos.y = 0;
+  player.pos.x = Math.floor(arena[0].length / 2) -
+                 Math.floor(player.matrix[0].length / 2);
+  if(collide(arena, player)) {
+    arena.forEach(row => row.fill(0));
+    score = 0;
+    document.getElementById('score').innerText = 'Score: 0';
+  }
+}
+
+function drawMatrix(matrix, offset) {
+  matrix.forEach((row,y) => {
+    row.forEach((value,x) => {
+      if(value !== 0) {
+        context.shadowColor = colors[value];
+        context.shadowBlur = 12;
+        context.fillStyle = colors[value];
+        context.fillRect(x + offset.x,
+                         y + offset.y,
+                         1,1);
+        context.shadowBlur = 0;
+      }
+    });
+  });
+}
+
+function draw() {
+  context.fillStyle = '#111422';
+  context.fillRect(0,0,canvas.width, canvas.height);
+  drawMatrix(arena, {x:0,y:0});
+  drawMatrix(player.matrix, player.pos);
+}
+
+function update(time = 0) {
+  const deltaTime = time - lastTime;
+  lastTime = time;
+  dropCounter += deltaTime;
+  if(dropCounter > dropInterval) {
+    playerDrop();
+  }
+  draw();
+  requestAnimationFrame(update);
+}
+
+document.addEventListener('keydown', event => {
+  if(event.key === 'ArrowLeft') playerMove(-1);
+  else if(event.key === 'ArrowRight') playerMove(1);
+  else if(event.key === 'ArrowDown') playerDrop();
+  else if(event.key === 'ArrowUp') playerRotate(1);
+  else if(event.key === ' ') {
+    while(!collide(arena, player)) player.pos.y++;
+    player.pos.y--;
+    merge(arena, player);
+    slamExplode();
+    playerReset();
+    arenaSweep();
+    dropCounter = 0;
+  }
+});
+
+playerReset();
+update();
+</script>
+
+</body>
+</html>

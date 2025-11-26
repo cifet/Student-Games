@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ride the Bus</title>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at top, #0f0f1f, #000015);
+            color: #e0e0ff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 30px;
+            font-weight: 600;
+            letter-spacing: 2px;
+        }
+
+        button {
+            font-size: 18px;
+            padding: 12px 26px;
+            margin: 10px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            transition: 0.2s;
+            color: white;
+            background: #1e1e3a;
+            box-shadow: 0 0 15px rgba(0,255,255,0.3);
+        }
+
+        button:hover {
+            transform: scale(1.07);
+            box-shadow: 0 0 25px rgba(0,255,255,0.6);
+        }
+
+        .card-container {
+            margin-top: 25px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .game-card {
+            width: 120px;
+            height: 170px;
+            border-radius: 10px;
+            background: linear-gradient(145deg, #ffffff, #ddddff);
+            color: #000;
+            font-size: 26px;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 20px rgba(0,255,255,0.4);
+            transition: 0.3s;
+        }
+
+        .fade-out {
+            opacity: 0;
+            transform: scale(0.4) rotate(20deg);
+            transition: 0.5s ease;
+        }
+
+    </style>
+
+    <!-- Confetti Library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+</head>
+<body>
+
+    <h1>Ride the Bus</h1>
+    <p>Guess whether the next card will be higher or lower.</p>
+    <button id="startBtn">Start Game</button>
+
+    <div id="gameArea" style="display:none;">
+        <h3 id="instruction">Make your guess.</h3>
+
+        <div class="card-container" id="cards"></div>
+
+        <button id="higherBtn">Higher</button>
+        <button id="lowerBtn">Lower</button>
+
+        <p id="result"></p>
+
+        <h3>Money: $<span id="money">0</span></h3>
+        <h4>High Score: $<span id="highScore">0</span></h4>
+    </div>
+
+    <script>
+        const suits = ['♠', '♥', '♦', '♣'];
+        const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+
+        let deck = [];
+        let currentCard, nextCard;
+        let money = 0;
+        let highScore = 0;
+
+        let successfulCards = [];
+
+        const startBtn = document.getElementById("startBtn");
+        const gameArea = document.getElementById("gameArea");
+        const cardsDiv = document.getElementById("cards");
+        const result = document.getElementById("result");
+        const higherBtn = document.getElementById("higherBtn");
+        const lowerBtn = document.getElementById("lowerBtn");
+        const moneySpan = document.getElementById("money");
+        const highScoreSpan = document.getElementById("highScore");
+
+        function createDeck() {
+            deck = [];
+            for (let s of suits) {
+                for (let i = 0; i < ranks.length; i++) {
+                    deck.push({
+                        suit: s,
+                        rank: ranks[i],
+                        value: i + 2
+                    });
+                }
+            }
+            shuffle(deck);
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                let j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function drawCard() {
+            return deck.pop();
+        }
+
+        function showCard(card) {
+            const cardDiv = document.createElement("div");
+            cardDiv.className = "game-card";
+            cardDiv.innerHTML = `<div>${card.rank}</div><div>${card.suit}</div>`;
+            return cardDiv;
+        }
+
+        function startGame() {
+            createDeck();
+            cardsDiv.innerHTML = "";
+            successfulCards = [];
+            result.innerText = "";
+            money = 0;
+            moneySpan.innerText = money;
+
+            currentCard = drawCard();
+            cardsDiv.appendChild(showCard(currentCard));
+
+            gameArea.style.display = "block";
+            higherBtn.disabled = false;
+            lowerBtn.disabled = false;
+        }
+
+        function guessCard(isHigher) {
+            if (!deck.length) {
+                result.innerText = "Deck is empty. Game over.";
+                return;
+            }
+
+            nextCard = drawCard();
+            const nextCardDiv = showCard(nextCard);
+            cardsDiv.appendChild(nextCardDiv);
+
+            let correct = isHigher
+                ? nextCard.value >= currentCard.value
+                : nextCard.value <= currentCard.value;
+
+            if (correct) {
+                money += 10;
+                moneySpan.innerText = money;
+                result.innerText = "Correct! +$10";
+                currentCard = nextCard;
+                successfulCards.push(nextCardDiv);
+
+                // reward trigger
+                if (successfulCards.length === 5) {
+                    activateCardExplosion();
+                }
+
+            } else {
+                result.innerText = "Wrong. Game over.";
+                higherBtn.disabled = true;
+                lowerBtn.disabled = true;
+            }
+
+            if (money > highScore) {
+                highScore = money;
+                highScoreSpan.innerText = highScore;
+            }
+        }
+
+        function activateCardExplosion() {
+    // explode ALL successful cards (5)
+    const cardsToExplode = successfulCards.slice(0, successfulCards.length);
+
+    cardsToExplode.forEach(card => {
+        let rect = card.getBoundingClientRect();
+
+        confetti({
+            particleCount: 80,
+            spread: 55,
+            origin: {
+                x: rect.left / window.innerWidth,
+                y: rect.top / window.innerHeight
+            }
+        });
+
+        card.classList.add("fade-out");
+        setTimeout(() => card.remove(), 500);
+    });
+
+    money += 100;
+    moneySpan.innerText = money;
+
+    // reset streak
+    successfulCards = [];
+}
+
+
+        startBtn.addEventListener("click", startGame);
+        higherBtn.addEventListener("click", () => guessCard(true));
+        lowerBtn.addEventListener("click", () => guessCard(false));
+    </script>
+
+</body>
+</html>
