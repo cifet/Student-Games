@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Medium Minesweeper</title>
+
+<style>
+    body {
+        background: #222;
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        color: white;
+        text-align: center;
+    }
+
+    #gameContainer {
+        display: inline-block;
+        margin-top: 20px;
+        border: 4px solid #444;
+        background: #333;
+        padding: 10px;
+    }
+
+    #grid {
+        display: grid;
+        grid-template-columns: repeat(16, 32px);
+        grid-template-rows: repeat(16, 32px);
+        gap: 2px;
+    }
+
+    .cell {
+        width: 32px;
+        height: 32px;
+        background: #555;
+        color: white;
+        font-size: 20px;
+        font-weight: bold;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+        border-radius: 4px;
+    }
+
+    .cell.revealed {
+        background: #aaa;
+        color: black;
+        cursor: default;
+    }
+
+    .cell.mine {
+        background: #e00;
+        color: white;
+    }
+
+    .cell.flagged {
+        background: #2a6;
+        color: yellow;
+    }
+
+    #topBar {
+        margin-bottom: 10px;
+        font-size: 24px;
+    }
+
+    #restart {
+        padding: 8px 16px;
+        font-size: 20px;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>Medium Minesweeper</h1>
+
+<div id="topBar">
+    Mines: <span id="mineCount">40</span>
+</div>
+
+<div id="gameContainer">
+    <div id="grid"></div>
+</div>
+
+<button id="restart">Restart</button>
+
+<script>
+/* ================================
+   GAME SETTINGS
+================================ */
+const SIZE = 16;       // 16x16 grid
+const MINES = 40;
+
+let grid = [];
+let mineCount = MINES;
+let gameOver = false;
+
+/* ================================
+   INIT GAME
+================================ */
+function init() {
+    const gridElem = document.getElementById("grid");
+    gridElem.innerHTML = "";
+    grid = [];
+    gameOver = false;
+    mineCount = MINES;
+    document.getElementById("mineCount").textContent = mineCount;
+
+    // Create 16x16 grid
+    for (let r = 0; r < SIZE; r++) {
+        grid[r] = [];
+        for (let c = 0; c < SIZE; c++) {
+            const cell = {
+                r,
+                c,
+                mine: false,
+                revealed: false,
+                flagged: false,
+                number: 0,
+                elem: document.createElement("div")
+            };
+
+            cell.elem.className = "cell";
+            cell.elem.oncontextmenu = e => { e.preventDefault(); toggleFlag(cell); };
+            cell.elem.onclick = () => reveal(cell);
+
+            gridElem.appendChild(cell.elem);
+            grid[r][c] = cell;
+        }
+    }
+
+    placeMines();
+    countNumbers();
+}
+
+/* ================================
+   PLACE MINES RANDOMLY
+================================ */
+function placeMines() {
+    let minesLeft = MINES;
+
+    while (minesLeft > 0) {
+        let r = Math.floor(Math.random() * SIZE);
+        let c = Math.floor(Math.random() * SIZE);
+
+        if (!grid[r][c].mine) {
+            grid[r][c].mine = true;
+            minesLeft--;
+        }
+    }
+}
+
+/* ================================
+   COUNT ADJACENT NUMBERS
+================================ */
+function countNumbers() {
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            if (grid[r][c].mine) continue;
+
+            let count = 0;
+
+            for (let rr = -1; rr <= 1; rr++) {
+                for (let cc = -1; cc <= 1; cc++) {
+                    let nr = r + rr;
+                    let nc = c + cc;
+
+                    if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE) {
+                        if (grid[nr][nc].mine) count++;
+                    }
+                }
+            }
+
+            grid[r][c].number = count;
+        }
+    }
+}
+
+/* ================================
+   FLAG A CELL (RIGHT CLICK)
+================================ */
+function toggleFlag(cell) {
+    if (gameOver || cell.revealed) return;
+
+    cell.flagged = !cell.flagged;
+
+    if (cell.flagged) {
+        cell.elem.classList.add("flagged");
+        cell.elem.textContent = "🚩";
+        mineCount--;
+    } else {
+        cell.elem.classList.remove("flagged");
+        cell.elem.textContent = "";
+        mineCount++;
+    }
+
+    document.getElementById("mineCount").textContent = mineCount;
+}
+
+/* ================================
+   REVEAL CELL (LEFT CLICK)
+================================ */
+function reveal(cell) {
+    if (gameOver || cell.revealed || cell.flagged) return;
+
+    cell.revealed = true;
+    cell.elem.classList.add("revealed");
+
+    if (cell.mine) {
+        cell.elem.classList.add("mine");
+        cell.elem.textContent = "💣";
+        gameLost();
+        return;
+    }
+
+    if (cell.number > 0) {
+        cell.elem.textContent = cell.number;
+    } else {
+        cell.elem.textContent = "";
+        expand(cell);
+    }
+
+    checkWin();
+}
+
+/* ================================
+   AUTO EXPAND (EMPTY CELLS)
+================================ */
+function expand(cell) {
+    for (let rr = -1; rr <= 1; rr++) {
+        for (let cc = -1; cc <= 1; cc++) {
+            let nr = cell.r + rr;
+            let nc = cell.c + cc;
+
+            if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE) {
+                let neighbor = grid[nr][nc];
+                if (!neighbor.revealed && !neighbor.mine) {
+                    reveal(neighbor);
+                }
+            }
+        }
+    }
+}
+
+/* ================================
+   GAME OVER
+================================ */
+function gameLost() {
+    gameOver = true;
+
+    // Reveal all mines
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            if (grid[r][c].mine) {
+                grid[r][c].elem.classList.add("mine");
+                grid[r][c].elem.textContent = "💣";
+            }
+        }
+    }
+
+    alert("💥 Game Over!");
+}
+
+/* ================================
+   CHECK WIN
+================================ */
+function checkWin() {
+    let safeCells = 0;
+
+    for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+            if (!grid[r][c].mine && grid[r][c].revealed) safeCells++;
+        }
+    }
+
+    if (safeCells === SIZE * SIZE - MINES) {
+        gameOver = true;
+        alert("🎉 You Win!");
+    }
+}
+
+/* ================================
+   RESTART BUTTON
+================================ */
+document.getElementById("restart").onclick = init;
+
+/* ================================
+   START GAME
+================================ */
+init();
+</script>
+
+</body>
+</html>
